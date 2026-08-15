@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+.git/
+bench/data/
+.env
+*.md
