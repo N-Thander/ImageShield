@@ -1,0 +1,133 @@
+name: imageshield
+
+# Backing services (redis / postgres / minio) carry no profile, so they always
+# start. The application containers sit behind the "app" profile, which gives
+# two dev modes:
+#   infra only  ->  make infra
+#   full stack  ->  make up
+#
+# Prefer the Makefile: it passes `--env-file .env`, without which Compose
+# interpolates ${..._PUBLISHED_PORT} against infra/ (the compose file's own
+# directory) and silently falls back to the defaults. The raw equivalents are:
+#   docker compose -f infra/docker-compose.yml --env-file .env up -d
+#   docker compose -f infra/docker-compose.yml --env-file .env --profile app up --build
+
+# api, worker and init all run the SAME image. The build is declared on `init`
+# only: if every service carried an identical build block, BuildKit would build
+# the same tag three times concurrently and the exports would race
+# ("image ...:dev: already exists"). init is the natural owner because api and
+# worker already gate on it via service_completed_successfully, so the image is
+# guaranteed to exist before they start.
+x-app-image: &app-image
+  image: imageshield-app:dev
+  env_file: [../.env]
+
+x-app-volumes: &app-volumes
+  # Bind-mounting the repo is what makes --reload useful; hf_cache keeps model
+  # weights out of the image and out of a rebuild.
+  - ..:/srv
+  - hf_cache:/root/.cache/huggingface
+
+services:
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    # Host-side port only. Containers always talk to each other on the internal
+    # network using the standard port, so remapping here is safe when something
+    # already owns the port on your machine.
+    ports: ["${REDIS_PUBLISHED_PORT:-6379}:6379"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    env_file: [../.env]
+    ports: ["${POSTGRES_PUBLISHED_PORT:-5432}:5432"]
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      # -d/-U pinned to our own db+user: bare pg_isready reports ready while the
+      # entrypoint's temporary bootstrap server is still up.
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  minio:
+    image: minio/minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    env_file: [../.env]
+    ports:
+      - "${MINIO_PUBLISHED_PORT:-9000}:9000"          # S3 API
+      - "${MINIO_CONSOLE_PUBLISHED_PORT:-9001}:9001"  # web console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  # One-shot bootstrap: apply schema, ensure bucket. Must exit 0 before api/worker start.
+  init:
+    <<: *app-image
+    profiles: ["app"]
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    command: sh -c "python -m app.migrate && python -m app.init_storage"
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  api:
+    <<: *app-image
+    profiles: ["app"]
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    restart: unless-stopped
+    ports: ["${API_PUBLISHED_PORT:-8000}:8000"]
+    volumes: *app-volumes
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  worker:
+    <<: *app-image
+    profiles: ["app"]
+    command: python -m workers.consumer
+    restart: unless-stopped
+    volumes: *app-volumes
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+volumes:
+  redis_data:
+  pg_data:
+  minio_data:
+  hf_cache:

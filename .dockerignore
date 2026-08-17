@@ -1,0 +1,31 @@
+# Build context is the repo root. Keep it small — .venv and frontend/node_modules
+# are multi-GB and would otherwise be shipped to the daemon on every build.
+.git/
+.gitignore
+.venv/
+venv/
+env/
+
+__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Frontend is not part of the Python app image.
+frontend/
+
+# Secrets and local state never belong in an image layer.
+.env
+*.env
+!.env.example
+
+# Bench fixtures are mounted, not baked in.
+bench/data/
+
+*.md
+!README.md
+LICENSE
+Makefile
+.claude/

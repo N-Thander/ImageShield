@@ -1,0 +1,24 @@
+# ImageShield runtime dependencies (CPU-only by default).
+#
+# torch is pulled from the PyTorch CPU index. The "+cpu" local version exists
+# *only* on that index, so this pin deterministically avoids the multi-GB
+# CUDA wheels that plain "torch" would drag in from PyPI.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# --- API ---
+fastapi==0.141.1
+uvicorn[standard]==0.52.1
+pydantic==2.13.4
+
+# --- imaging / IO ---
+pillow==12.3.0
+requests==2.34.2
+
+# --- model stack (loaded lazily at runtime, not at import) ---
+transformers==5.15.0
+torch==2.13.0+cpu
+
+# --- backing services ---
+psycopg[binary]==3.3.4
+redis==8.1.0
+minio==7.2.20
