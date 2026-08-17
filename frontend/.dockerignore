@@ -1,0 +1,23 @@
+# Build inputs only — everything below is either reinstalled, rebuilt, or
+# irrelevant inside the image.
+node_modules
+.next
+out
+build
+
+.git
+.gitignore
+
+*.md
+
+# Never bake local env files into an image; the Dockerfile takes build args.
+.env
+.env.*
+
+npm-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+
+Dockerfile
+.dockerignore

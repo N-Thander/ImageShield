@@ -114,6 +114,7 @@ idempotent, so this is the clean-machine reproduction path.
 | Redis | `localhost:6379` | |
 | MinIO S3 | `localhost:9000` | |
 | MinIO console | http://localhost:9001 | login from `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` |
+| Dashboard | http://localhost:3000 | Next.js ops UI; see "Running the frontend" |
 
 ### API surface (phase 0)
 
@@ -138,8 +139,51 @@ common/    shared hashing / phash / event helpers
 ingest/    batch ingestion entrypoints
 infra/     docker-compose.yml + schema.sql
 docker/    Dockerfile + entrypoint (api and worker share one image)
-frontend/  Next.js UI (not part of the Python image or the compose stack)
+frontend/  Next.js ops dashboard (own image + compose service)
 ```
+
+---
+
+## Running the frontend
+
+The dashboard lives in `frontend/` — Next.js App Router, TypeScript, Tailwind v4,
+Recharts. It reads `GET /stats` and `/services/{postgres|redis|queue|storage}`
+for snapshots and streams `ModerationEvent` JSON from `ws://…/live`.
+
+### Dev
+
+```bash
+cd frontend
+cp .env.example .env.local      # localhost-facing URLs
+npm install
+npm run dev                     # http://localhost:3000
+```
+
+Point it at a running API with `make infra` + `uvicorn app.main:app` (or the full
+`make up`). Endpoints that don't exist yet render an explicit "no data yet" card
+rather than crashing or showing invented numbers, so the UI is usable long
+before the metrics API is finished.
+
+### Prod
+
+```bash
+docker compose -f infra/docker-compose.yml --env-file .env --profile app up --build frontend
+```
+
+Then open **http://localhost:3000**.
+
+> **`NEXT_PUBLIC_*` are build-time values.** Next inlines them into the browser
+> bundle during `next build`, so the compose service passes them as `build.args`,
+> not just `environment`. They must also be **host-facing** — the browser
+> resolves them, so `http://api:8000` would fail; use `http://localhost:8000`.
+> To change them, rebuild:
+>
+> ```bash
+> NEXT_PUBLIC_API_URL=http://localhost:9000 \
+>   docker compose -f infra/docker-compose.yml --env-file .env --profile app build frontend
+> ```
+
+`frontend/.env.example` documents each variable.
 
 ### Phase-1 stubs
 

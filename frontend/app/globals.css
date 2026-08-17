@@ -1,26 +1,150 @@
 @import "tailwindcss";
 
+/* ---------------------------------------------------------------------------
+   Brand palette — single source of truth. Mapped into Tailwind's `primary-*`
+   scale in the @theme block below. (Tailwind v4 is CSS-first: the theme lives
+   here rather than in a tailwind.config.js.)
+--------------------------------------------------------------------------- */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --color-50: #f3e9fb;
+  --color-100: #dec2f5;
+  --color-200: #c99aef;
+  --color-300: #b373e8;
+  --color-400: #9840e0;
+  --color-500: #8924db;
+  --color-600: #701db4;
+  --color-700: #57178c;
+  --color-800: #3f1065;
+  --color-900: #260a3d;
+  --color-950: #0e0416;
+
+  /* Surfaces + ink */
+  --surface-page: var(--color-50);
+  --surface-card: #ffffff;
+  --hairline: var(--color-100);
+  --ink: var(--color-900);
+  --ink-muted: #6b6577;
+
+  /* Semantic status — pastel tinted pills, darker text. Never saturated fills. */
+  --safe-bg: #e3f6ec;
+  --safe-fg: #1c7a4d;
+  --safe-dot: #3ec486;
+  --review-bg: #fdf1dc;
+  --review-fg: #8f5f17;
+  --review-dot: #e8a33d;
+  --block-bg: #fce7ec;
+  --block-fg: #a12a46;
+  --block-dot: #e5688a;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-primary-50: var(--color-50);
+  --color-primary-100: var(--color-100);
+  --color-primary-200: var(--color-200);
+  --color-primary-300: var(--color-300);
+  --color-primary-400: var(--color-400);
+  --color-primary-500: var(--color-500);
+  --color-primary-600: var(--color-600);
+  --color-primary-700: var(--color-700);
+  --color-primary-800: var(--color-800);
+  --color-primary-900: var(--color-900);
+  --color-primary-950: var(--color-950);
+
+  --color-page: var(--surface-page);
+  --color-card: var(--surface-card);
+  --color-hairline: var(--hairline);
+  --color-ink: var(--ink);
+  --color-muted: var(--ink-muted);
+
+  --color-safe-bg: var(--safe-bg);
+  --color-safe-fg: var(--safe-fg);
+  --color-safe-dot: var(--safe-dot);
+  --color-review-bg: var(--review-bg);
+  --color-review-fg: var(--review-fg);
+  --color-review-dot: var(--review-dot);
+  --color-block-bg: var(--block-bg);
+  --color-block-fg: var(--block-fg);
+  --color-block-dot: var(--block-dot);
+
+  --font-sans: var(--font-inter);
+
+  --shadow-card: 0 1px 2px rgb(38 10 61 / 0.04), 0 8px 24px -16px rgb(38 10 61 / 0.16);
+  --shadow-lift: 0 2px 4px rgb(38 10 61 / 0.05), 0 16px 36px -20px rgb(38 10 61 / 0.22);
+
+  --animate-row-in: row-in 620ms ease-out;
+  --animate-live-pulse: live-pulse 1.8s ease-in-out infinite;
+  --animate-shimmer: shimmer 1.6s ease-in-out infinite;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+    background-color: var(--color-50);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    background-color: transparent;
+  }
+}
+
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgb(62 196 134 / 0.5);
+  }
+  50% {
+    opacity: 0.75;
+    box-shadow: 0 0 0 5px rgb(62 196 134 / 0);
+  }
+}
+
+@keyframes shimmer {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
   }
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--surface-page);
+  color: var(--ink);
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Tabular figures keep live-updating numbers from jittering. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+.scroll-slim {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-100) transparent;
+}
+.scroll-slim::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scroll-slim::-webkit-scrollbar-thumb {
+  background-color: var(--color-100);
+  border-radius: 9999px;
+}
+.scroll-slim::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
