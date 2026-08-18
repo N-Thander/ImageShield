@@ -1,59 +1,57 @@
-"""Model-loading scaffold.
-
-Deliberately does **no** work at import time — importing this module must stay
-cheap so the API can boot (and /health can answer) without pulling weights.
-Loading is lazy and cached; the first caller pays the download cost, which in
-Docker lands in the ``hf_cache`` named volume.
-"""
-
-from __future__ import annotations
-
-import logging
 import threading
-from typing import Any, Optional
+from typing import TYPE_CHECKING
 
-from app import config
+if TYPE_CHECKING:
+    from PIL import Image
 
-log = logging.getLogger("imageshield.models")
+# If your app/config already exposes the model id, import it from there instead
+# and delete this constant, to keep a single source of truth.
+MODEL_ID = "Falconsai/nsfw_image_detection"
 
+_model = None
+_processor = None
+_nsfw_index: int | None = None
 _lock = threading.Lock()
-_processor: Optional[Any] = None
-_model: Optional[Any] = None
 
 
-def load_model() -> tuple[Any, Any]:
-    """Return ``(processor, model)``, loading once on first call.
-
-    TODO(phase-1): device selection (cpu/cuda), fp16, ``model.eval()``,
-    warm-up pass, and a real error path when the download fails.
-    """
-    global _processor, _model
-
-    if _model is not None and _processor is not None:
-        return _processor, _model
-
+def _load():
+    """Load model + processor once. Safe under concurrent first calls."""
+    global _model, _processor, _nsfw_index
+    if _model is not None:                     # fast path, no lock
+        return _model, _processor, _nsfw_index
     with _lock:
-        if _model is None or _processor is None:
-            # Imported here, not at module scope: transformers/torch cost
-            # seconds to import and must not block API startup.
-            from transformers import AutoImageProcessor, AutoModelForImageClassification
+        if _model is None:                     # re-check inside the lock
+            import torch  # noqa: F401  (kept warm for the no_grad context below)
+            from transformers import (
+                AutoModelForImageClassification,
+                ViTImageProcessor,
+            )
 
-            log.info("loading model %s", config.MODEL_NAME)
-            _processor = AutoImageProcessor.from_pretrained(config.MODEL_NAME)
-            _model = AutoModelForImageClassification.from_pretrained(config.MODEL_NAME)
+            model = AutoModelForImageClassification.from_pretrained(MODEL_ID)
+            model.eval()                       # disable dropout/bn updates
+            processor = ViTImageProcessor.from_pretrained(MODEL_ID)
 
-    return _processor, _model
+            # resolve the nsfw class index from the model's own label map,
+            # so we never hard-code 0/1 and break if the order ever changes
+            id2label = {int(k): v.lower() for k, v in model.config.id2label.items()}
+            nsfw_index = next(i for i, name in id2label.items() if name == "nsfw")
+
+            _processor = processor
+            _nsfw_index = nsfw_index
+            _model = model                     # publish LAST: presence == fully ready
+    return _model, _processor, _nsfw_index
 
 
-def score_image(image: Any) -> float:
-    """Return P(nsfw) in ``[0, 1]`` for a PIL image.
-
-    TODO(phase-1): preprocess, forward pass under ``torch.inference_mode()``,
-    softmax the logits, and map the label index to the nsfw probability.
-    """
-    raise NotImplementedError("TODO(phase-1): implement NSFW scoring")
+def warmup() -> None:
+    _load()
 
 
-def model_version() -> str:
-    """Identifier stamped onto every row this model decides."""
-    return config.MODEL_VERSION
+def score_image(img: "Image.Image") -> float:
+    import torch
+
+    model, processor, nsfw_index = _load()
+    with torch.no_grad():
+        inputs = processor(images=img.convert("RGB"), return_tensors="pt")
+        logits = model(**inputs).logits
+        probs = torch.softmax(logits, dim=-1)[0]
+        return float(probs[nsfw_index].item())

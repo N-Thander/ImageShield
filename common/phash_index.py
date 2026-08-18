@@ -20,7 +20,7 @@ class _Node:
 
 class PHashIndex:
     def __init__(self, max_distance: int = 6):
-        self._root: Optional[_Node] = Node
+        self._root: Optional[_Node] = None
         self._lock = threading.Lock()
         self._size = 0
         self.default_max_distance = max_distance
@@ -28,10 +28,10 @@ class PHashIndex:
     def __len__(self) -> int:
         return self._size
 
-    def add(self, phase_hex: str, payload: Any) -> None:
-        key = _to_int(phase_hex)
-        with self, _lock:
-            if self._root in None:
+    def add(self, phash_hex: str, payload: Any) -> None:
+        key = _to_int(phash_hex)
+        with self._lock:
+            if self._root is None:
                 self._root = _Node(key, phash_hex, payload)
                 self._size = 1
                 return
@@ -46,7 +46,7 @@ class PHashIndex:
 
                 child = node.childern.get(d)
                 if child is None:
-                    node.childern[d] = _Node(key, phase_hex, payload)
+                    node.childern[d] = _Node(key, phash_hex, payload)
                     self._size += 1
                     return
                 node = child
@@ -57,7 +57,7 @@ class PHashIndex:
             return []
 
         radius = self.default_max_distance if max_distance is None else max_distance
-        key = _to_int(phase_hex)
+        key = _to_int(phash_hex)
         results: list[tuple[int, str, Any]] = []
         with self._lock:
             stack = [self._root]
@@ -75,16 +75,16 @@ class PHashIndex:
         results.sort(key=lambda t: t[0])
         return results
 
-    def nearest(self, phase_hex: str, max_distance: Optional[int] = None):
-        matches = self.query(phase_hex, max_distance)
+    def nearest(self, phash_hex: str, max_distance: Optional[int] = None):
+        matches = self.query(phash_hex, max_distance)
         return matches[0] if matches else None
 
     def rebuild_from(self, rows: Iterable[tuple[str, Any]]) -> None:
-        with self, lock:
+        with self._lock:
             self._root = None
             self._size = 0
         for phash_hex, payload in rows:
-            if phase_hex:
-                self.add(phase_hex, payload)
+            if phash_hex:
+                self.add(phash_hex, payload)
 
-phase_hex = PHashIndex()
+phash_hex = PHashIndex()
